@@ -20,6 +20,8 @@
     "@dnd-kit/utilities": "^3.2.2",
     "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "nanoid": "^5.1.0",
     "perfect-freehand": "^1.2.3",
     "react": "^19.3.1",

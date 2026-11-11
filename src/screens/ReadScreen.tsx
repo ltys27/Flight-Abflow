@@ -17,6 +17,7 @@ import { useToast } from "../components/Toast";
 import { Confirm } from "../components/Confirm";
 import { saveProcedure, discardOverlay, rebaseOverlay, deleteUserProcedure } from "../state/procedures";
 import { downloadText, procedureToJson, procedureToMarkdown, safeFilename } from "../edit/export";
+import { buildProcedurePdf, downloadBlob } from "../edit/pdf";
 import { diffProcedures, rowSummary } from "../edit/diff";
 import { todayIso } from "../util/id";
 import { useProcedureStats } from "../schedule/useStats";
@@ -36,6 +37,9 @@ export function ReadScreen({ id }: { id: string }) {
   const [more, setMore] = useState(false);
   const [diffOpen, setDiffOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pdfOpen, setPdfOpen] = useState(false);
+  const [pdfOpts, setPdfOpts] = useState({ includeWhy: false, includeNotes: false, includeReferenceTables: true });
+  const [pdfBusy, setPdfBusy] = useState(false);
   const [jumpRow, setJumpRow] = useState<string | null>(() => hashQuery().get("row"));
   const annotations = useLiveQuery(() => db.annotations.where("target.procedureId").equals(id).toArray(), [id], []);
   const stats = useProcedureStats(entry ? [entry.procedure] : []);
@@ -277,6 +281,7 @@ export function ReadScreen({ id }: { id: string }) {
             <button type="button" className="btn" aria-pressed={settings.hideAnnotations} onClick={() => void setSetting("hideAnnotations", !settings.hideAnnotations)}>{settings.hideAnnotations ? "Show annotations" : "Hide annotations"}</button>
             <button type="button" className="btn" onClick={exportJson}>Export JSON</button>
             <button type="button" className="btn" onClick={exportMd}>Export Markdown</button>
+            <button type="button" className="btn" onClick={() => { setMore(false); setPdfOpen(true); }}>Export PDF…</button>
             <button type="button" className="btn" onClick={() => { setMore(false); setTimeout(() => window.print(), 100); }}>Print</button>
             {p.relatedProcedures.length > 0 && p.relatedProcedures.map((r) => <a key={r} className="btn" href={href.read(r)}>Related: {lib.get(r)?.procedure.title ?? r}</a>)}
             {entry.source === "overlay" && <button type="button" className="btn danger" onClick={() => { setMore(false); setConfirmDelete(true); }}>Discard my edits</button>}
@@ -285,6 +290,46 @@ export function ReadScreen({ id }: { id: string }) {
         </Sheet>
       )}
 
+      {pdfOpen && (
+        <Sheet title="Export PDF" onClose={() => setPdfOpen(false)}>
+          <p className="small muted">A4 portrait. One table per gate with PF and PM columns, callouts in bold, verify and to-fill flags, reference tables at the end.{fleet ? ` Shows the ${fleet} variant.` : ""}</p>
+          <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={pdfOpts.includeReferenceTables} onChange={(e) => setPdfOpts({ ...pdfOpts, includeReferenceTables: e.target.checked })} style={{ width: 24, height: 24, minHeight: 0 }} />
+            <span style={{ margin: 0 }}>Include reference tables</span>
+          </label>
+          <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={pdfOpts.includeWhy} onChange={(e) => setPdfOpts({ ...pdfOpts, includeWhy: e.target.checked })} style={{ width: 24, height: 24, minHeight: 0 }} />
+            <span style={{ margin: 0 }}>Include rationale and source references</span>
+          </label>
+          <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input type="checkbox" checked={pdfOpts.includeNotes} onChange={(e) => setPdfOpts({ ...pdfOpts, includeNotes: e.target.checked })} style={{ width: 24, height: 24, minHeight: 0 }} />
+            <span style={{ margin: 0 }}>Include my notes</span>
+          </label>
+          <div className="row-actions">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={pdfBusy}
+              onClick={async () => {
+                setPdfBusy(true);
+                try {
+                  const blob = await buildProcedurePdf(p, { ...pdfOpts, fleetLabel: fleet, notes: annotations });
+                  downloadBlob(`${safeFilename(p.id)}${fleet ? `-${fleet.toLowerCase()}` : ""}.pdf`, blob);
+                  toast.show("PDF created");
+                  setPdfOpen(false);
+                } catch (e) {
+                  toast.show(`PDF failed: ${(e as Error).message}`);
+                } finally {
+                  setPdfBusy(false);
+                }
+              }}
+            >
+              {pdfBusy ? "Building…" : "Create PDF"}
+            </button>
+            <button type="button" className="btn" onClick={() => setPdfOpen(false)}>Cancel</button>
+          </div>
+        </Sheet>
+      )}
       {confirmDelete && (
         <Confirm
           title={entry.source === "overlay" ? "Discard edits?" : "Delete procedure?"}
