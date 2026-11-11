@@ -1,56 +1,86 @@
-import { useEffect, useState } from "react";
-import { loadShippedLibrary, type LibraryLoadResult } from "../content/library";
+import { useEffect, type ReactNode } from "react";
+import { LibraryProvider } from "../state/LibraryProvider";
+import { ToastProvider } from "../components/Toast";
+import { useRoute, href } from "./router";
+import { useSettings } from "../state/settings";
+import { LibraryScreen } from "../screens/LibraryScreen";
+import { ReadScreen } from "../screens/ReadScreen";
+import { EditScreen } from "../screens/EditScreen";
+import { DrillScreen } from "../screens/DrillScreen";
+import { ReviewScreen } from "../screens/ReviewScreen";
+import { OpenItemsScreen } from "../screens/OpenItemsScreen";
+import { AnnotationsScreen } from "../screens/AnnotationsScreen";
+import { SessionsScreen, SessionScreen } from "../screens/SessionsScreen";
+import { SettingsScreen } from "../screens/SettingsScreen";
+import { NewProcedureScreen } from "../screens/NewProcedureScreen";
+import { UpdatePrompt } from "./UpdatePrompt";
+import { BackupReminder } from "../backup/BackupReminder";
 
-/**
- * Milestone 1 shell: loads the shipped library and shows what validated and
- * what did not. The real screens (spec 6) arrive in milestone 2.
- */
-export function App() {
-  const [lib, setLib] = useState<LibraryLoadResult | null>(null);
-
+function ThemeApplier({ children }: { children: ReactNode }) {
+  const s = useSettings();
   useEffect(() => {
-    let alive = true;
-    loadShippedLibrary().then((r) => {
-      if (alive) setLib(r);
-    });
-    return () => {
-      alive = false;
+    const root = document.documentElement;
+    const apply = () => {
+      const sys = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      root.dataset.theme = s.theme === "system" ? sys : s.theme;
+      root.dataset.text = s.textSize;
+      const meta = document.querySelector('meta[name="theme-color"]');
+      meta?.setAttribute("content", root.dataset.theme === "light" ? "#ffffff" : "#111318");
     };
-  }, []);
+    apply();
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [s.theme, s.textSize]);
+  return <>{children}</>;
+}
 
-  if (!lib) return <main><p className="muted">Loading library…</p></main>;
+const NAV: Array<{ to: string; label: string; ico: string; match: string[] }> = [
+  { to: href.library(), label: "Library", ico: "▤", match: ["library", "read", "edit", "drill", "new"] },
+  { to: href.review(), label: "Review", ico: "◔", match: ["review"] },
+  { to: href.openItems(), label: "Open", ico: "◍", match: ["open-items"] },
+  { to: href.annotations(), label: "Notes", ico: "✎", match: ["annotations", "sessions", "session"] },
+  { to: href.settings(), label: "Settings", ico: "⚙", match: ["settings"] },
+];
 
+export function App() {
+  const route = useRoute();
+  let screen: ReactNode;
+  switch (route.name) {
+    case "library": screen = <LibraryScreen />; break;
+    case "read": screen = <ReadScreen id={route.id} key={route.id} />; break;
+    case "edit": screen = <EditScreen id={route.id} key={route.id} />; break;
+    case "drill": screen = <DrillScreen id={route.id} key={route.id} />; break;
+    case "review": screen = <ReviewScreen />; break;
+    case "open-items": screen = <OpenItemsScreen />; break;
+    case "annotations": screen = <AnnotationsScreen />; break;
+    case "sessions": screen = <SessionsScreen />; break;
+    case "session": screen = <SessionScreen id={route.id} key={route.id} />; break;
+    case "settings": screen = <SettingsScreen />; break;
+    case "new": screen = <NewProcedureScreen />; break;
+  }
+  const immersive = route.name === "drill" || route.name === "edit";
   return (
-    <main>
-      <h1>Flow Scripts</h1>
-      {lib.issues.length > 0 && (
-        <section className="card" aria-label="Validation problems">
-          <strong>Files that did not load</strong>
-          <ul>
-            {lib.issues.map((i, k) => (
-              <li key={k} className="issue">
-                <code>{i.file}</code> at <code>{i.path}</code>: {i.message}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <ul aria-label="Procedures">
-        {lib.index
-          .filter((e) => lib.procedures.has(e.id))
-          .map((e) => {
-            const p = lib.procedures.get(e.id)!;
-            const rows = p.gates.reduce((n, g) => n + g.rows.length, 0);
-            return (
-              <li key={e.id} className="card">
-                <strong>{p.title}</strong>{" "}
-                <span className="muted">
-                  {p.category} · {p.fleets.join(", ")} · {p.gates.length} gates · {rows} rows · v{p.version}
-                </span>
-              </li>
-            );
-          })}
-      </ul>
-    </main>
+    <LibraryProvider>
+      <ToastProvider>
+        <ThemeApplier>
+          <div className="app">
+            {!immersive && (
+              <nav className="bottomnav" aria-label="Main">
+                {NAV.map((n) => (
+                  <a key={n.to} href={n.to} aria-current={n.match.includes(route.name) ? "page" : undefined}>
+                    <span className="ico" aria-hidden="true">{n.ico}</span>
+                    <span>{n.label}</span>
+                  </a>
+                ))}
+              </nav>
+            )}
+            <div className="content">{screen}</div>
+            <UpdatePrompt />
+            <BackupReminder />
+          </div>
+        </ThemeApplier>
+      </ToastProvider>
+    </LibraryProvider>
   );
 }
