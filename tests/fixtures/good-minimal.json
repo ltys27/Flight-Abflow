@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "fixture-minimal",
+  "title": "Fixture minimal",
+  "category": "MISC",
+  "fleets": ["CEO"],
+  "tags": [],
+  "version": 1,
+  "relatedProcedures": [],
+  "gates": [],
+  "referenceTables": []
+}
