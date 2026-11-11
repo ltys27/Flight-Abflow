@@ -188,13 +188,18 @@ label.field > span { display: block; font-size: 0.85rem; color: var(--muted); ma
 .ink-layer.active { pointer-events: auto; touch-action: none; cursor: crosshair; }
 .ink-layer svg { width: 100%; height: 100%; display: block; }
 
-/* Narrow: cards */
-.row-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin: 8px 0; }
-.row-card .trigger { font-weight: 600; }
-.lane-block { border-left: 4px solid var(--border); padding: 6px 10px; margin-top: 6px; border-radius: 0 6px 6px 0; }
+/* Narrow: continuous two-column flow, PF left and PM right, trigger spanning above each row */
+.row-card { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 0 6px; margin: 0; }
+.row-card:first-of-type { border-top: 0; }
+.row-card .trigger { font-weight: 600; padding: 0 2px 6px; }
+.row-card .lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: stretch; }
+.lane-block { border-left: 4px solid var(--border); padding: 6px 8px; border-radius: 0 6px 6px 0; min-width: 0; }
 .lane-block.pf { border-left-color: var(--pf); background: var(--pf-bg); }
-.lane-block.pm { border-left-color: var(--pm); background: var(--pm-bg); }
+.lane-block.pm { border-left-color: var(--pm); background: var(--pm-bg); grid-column: 2; }
 .lane-block.action { border-left-color: var(--muted); }
+.lane-block.span { grid-column: 1 / -1; }
+.lane-block.right { grid-column: 2; }
+.row-card .row-badges { padding: 0 2px; }
 
 /* Wide: table */
 table.flow { width: 100%; border-collapse: collapse; }
@@ -209,7 +214,7 @@ table.flow tbody tr.row-wrap { position: relative; }
 
 /* Focus mode */
 .focus { position: fixed; inset: 0; z-index: 30; background: var(--bg); overflow: auto; padding: 16px; font-size: 1.2rem; }
-.focus .row-card { font-size: 1.1em; }
+.focus .row-card { font-size: 1.1em; padding: 12px 0; }
 .focus-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 
 /* Drill */

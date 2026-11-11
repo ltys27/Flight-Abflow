@@ -112,29 +112,32 @@ export function RowView(p: RowViewProps) {
     );
   }
 
+  const whoCol = row.who === "PF" ? "pf" : row.who === "PM" ? "pm" : "both";
   return (
     <div className={`row-card row-wrap${hl}`} id={`row-${row.id}`} data-row-id={row.id} style={style} {...press}>
       <div className="trigger">
         <span className="num">{number}</span> {row.trigger} <StatusMarker row={row} /> <InfoControl row={row} />
       </div>
-      {twoLane ? (
-        <>
-          <div className="lane-block pf">
-            <div className="lane-label pf">PF</div>
-            <CellText cell={row.pf} />
+      <div className="lanes">
+        {twoLane ? (
+          <>
+            <div className="lane-block pf">
+              <div className="lane-label pf">PF</div>
+              <CellText cell={row.pf} />
+            </div>
+            <div className="lane-block pm">
+              <div className="lane-label pm">PM</div>
+              <CellText cell={row.pm} />
+            </div>
+          </>
+        ) : (
+          <div className={`lane-block ${whoCol === "both" ? "action span" : whoCol}${whoCol === "pm" ? " right" : ""}`}>
+            <div className={`lane-label ${whoCol === "both" ? "" : whoCol}`}>{row.who ?? "UNASSIGNED"}</div>
+            {row.action || <span className="muted">—</span>}
+            {row.callout && <span className="callout">“{row.callout}”</span>}
           </div>
-          <div className="lane-block pm">
-            <div className="lane-label pm">PM</div>
-            <CellText cell={row.pm} />
-          </div>
-        </>
-      ) : (
-        <div className={`lane-block ${row.who === "PF" ? "pf" : row.who === "PM" ? "pm" : "action"}`}>
-          <div className={`lane-label ${row.who === "PF" ? "pf" : row.who === "PM" ? "pm" : ""}`}>{row.who ?? "UNASSIGNED"}</div>
-          {row.action || <span className="muted">—</span>}
-          {row.callout && <span className="callout">“{row.callout}”</span>}
-        </div>
-      )}
+        )}
+      </div>
       {badges}
       {inkLayer}
     </div>
