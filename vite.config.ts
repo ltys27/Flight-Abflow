@@ -31,6 +31,15 @@ export default defineConfig({
         navigateFallback: "index.html",
         // Control the page on first install so a single visit is enough for an offline cold start.
         clientsClaim: true,
+        // Safety net: anything same-origin fetched while online is kept for offline use,
+        // even if the precache install was interrupted (e.g. app backgrounded on first launch).
+        runtimeCaching: [
+          {
+            urlPattern: ({ sameOrigin, request }) => sameOrigin && request.method === "GET",
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "app-runtime", expiration: { maxEntries: 200 } },
+          },
+        ],
         cleanupOutdatedCaches: true,
       },
     }),

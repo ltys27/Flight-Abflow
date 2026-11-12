@@ -7,6 +7,7 @@ import { Confirm } from "../components/Confirm";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { nowIso } from "../util/id";
+import { getOfflineStatus, prepareOffline, type OfflineStatus } from "../app/offlineStatus";
 
 export function SettingsScreen() {
   const s = useSettings();
@@ -17,6 +18,11 @@ export function SettingsScreen() {
   const [erase, setErase] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  const [offline, setOffline] = useState<OfflineStatus | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  useEffect(() => {
+    void getOfflineStatus().then(setOffline);
+  }, []);
 
   useEffect(() => {
     void storageEstimate().then(setStorage);
@@ -77,6 +83,31 @@ export function SettingsScreen() {
             <input type="date" value={s.procedureTargetDates[e.id] ?? ""} onChange={(ev) => { const next = { ...s.procedureTargetDates }; if (ev.target.value) next[e.id] = ev.target.value; else delete next[e.id]; void setSetting("procedureTargetDates", next); }} />
           </label>
         ))}
+      </section>
+      <section className="card" aria-label="Offline">
+        <h2 style={{ marginTop: 0 }}>Offline</h2>
+        {offline && (
+          <>
+            <p className={`banner ${offline.precached && offline.registered ? "" : "warn"}`} role="status">
+              {!offline.supported
+                ? "This browser cannot store the app for offline use (private browsing, or service workers disabled)."
+                : offline.precached && offline.registered
+                  ? "Ready: the app and all procedures are stored on this device and open without a connection."
+                  : offline.registered
+                    ? "Not ready yet: the offline copy is still being stored. Stay online for a moment, then check again."
+                    : "Not ready: the offline worker is not installed. Make sure you are online and tap Prepare offline."}
+            </p>
+            <div className="kv small">
+              <span>Worker</span><span>{offline.registered ? `${offline.state ?? "registered"}${offline.controlling ? ", controlling this page" : ", not yet controlling this page"}` : "not registered"}</span>
+              <span>Cached files</span><span>{offline.cachedFiles}</span>
+              <span>Running as</span><span>{offline.standalone ? "installed app" : "browser tab"}</span>
+            </div>
+            <div className="row-actions" style={{ marginTop: 8 }}>
+              <button type="button" className="btn small primary" disabled={preparing || !offline.supported} onClick={async () => { setPreparing(true); try { await prepareOffline(); } catch (e) { toast.show(`Could not prepare: ${(e as Error).message}`); } setOffline(await getOfflineStatus()); setPreparing(false); }}>{preparing ? "Preparing…" : "Prepare offline"}</button>
+              <button type="button" className="btn small" onClick={async () => setOffline(await getOfflineStatus())}>Check again</button>
+            </div>
+          </>
+        )}
       </section>
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Storage</h2>

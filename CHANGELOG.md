@@ -94,6 +94,11 @@
   jsPDF + jspdf-autotable (both MIT), loaded on demand in their own chunk.
   Standard PDF fonts cover Latin text; symbols outside WinAnsi fall back.
 - GitHub Pages deployment workflow publishing `dist/` to the `gh-pages` branch.
+- Offline hardening: same-origin runtime cache (stale-while-revalidate) as a
+  safety net beside the precache, procedure fetches no longer bypass caches,
+  an Offline status card in Settings (worker state, cached files, installed
+  vs browser tab, Prepare offline / Check again) and a one-time "Ready to
+  work offline" notice.
 
 ## Decisions the spec did not cover
 1. A lane cell counts as "completely empty" only with no action, no callout

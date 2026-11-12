@@ -19,7 +19,7 @@ export interface LibraryLoadResult {
 export const PROCEDURES_BASE = "procedures/";
 
 async function fetchText(path: string): Promise<string> {
-  const res = await fetch(path, { cache: "no-cache" });
+  const res = await fetch(path);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.text();
 }
