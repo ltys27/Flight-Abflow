@@ -1,4 +1,4 @@
-import { db, ensurePersisted } from "../db/db";
+import { clearTombstone, db, ensurePersisted, recordTombstone } from "../db/db";
 import type { Procedure } from "../content/schema";
 import { newId, nowIso } from "../util/id";
 import { touchDataChanged } from "../state/settings";
@@ -25,6 +25,7 @@ export async function addAnnotation(
       .filter((x) => x.kind === "confidence" && x.target.procedureId === a.target.procedureId)
       .toArray();
     await db.annotations.bulkDelete(prev.map((p) => p.id));
+    for (const p of prev) await recordTombstone("annotations", p.id);
   }
   await db.annotations.put(full);
   await touchDataChanged();
@@ -42,14 +43,17 @@ export async function deleteAnnotation(id: string): Promise<Annotation | undefin
   const cur = await db.annotations.get(id);
   if (!cur) return undefined;
   await db.annotations.delete(id);
-  if (cur.blobId) await db.blobs.delete(cur.blobId);
+  await recordTombstone("annotations", id);
+  // The voice blob is kept until the undo window has clearly passed; sync drops unreferenced blobs.
   await touchDataChanged();
   return cur;
 }
 
 /** Undo helper: put a deleted annotation back exactly as it was. */
 export async function restoreAnnotation(a: Annotation): Promise<void> {
-  await db.annotations.put(a);
+  await db.annotations.put({ ...a, updatedAt: new Date().toISOString() });
+  await clearTombstone("annotations", a.id);
+  await touchDataChanged();
 }
 
 export async function reattachAnnotation(id: string, target: AnnotationTarget): Promise<void> {

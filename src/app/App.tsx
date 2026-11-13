@@ -15,6 +15,7 @@ import { SettingsScreen } from "../screens/SettingsScreen";
 import { NewProcedureScreen } from "../screens/NewProcedureScreen";
 import { UpdatePrompt } from "./UpdatePrompt";
 import { BackupReminder } from "../backup/BackupReminder";
+import { useAutoSync } from "../sync/useAutoSync";
 
 function ThemeApplier({ children }: { children: ReactNode }) {
   const s = useSettings();
@@ -42,6 +43,11 @@ const NAV: Array<{ to: string; label: string; ico: string; match: string[] }> = 
   { to: href.annotations(), label: "Notes", ico: "✎", match: ["annotations", "sessions", "session"] },
   { to: href.settings(), label: "Settings", ico: "⚙", match: ["settings"] },
 ];
+
+function AutoSync() {
+  useAutoSync();
+  return null;
+}
 
 export function App() {
   const route = useRoute();
@@ -78,6 +84,7 @@ export function App() {
             <div className="content">{screen}</div>
             <UpdatePrompt />
             <BackupReminder />
+            <AutoSync />
           </div>
         </ThemeApplier>
       </ToastProvider>

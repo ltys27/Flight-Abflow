@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+/** Stable sensor options: new objects each render would re-create sensors and cancel an in-progress drag. */
+const POINTER_OPTS = { activationConstraint: { distance: 6 } };
+const TOUCH_OPTS = { activationConstraint: { delay: 200, tolerance: 8 } };
+const KEYBOARD_OPTS = { coordinateGetter: sortableKeyboardCoordinates };
 import { useLibrary } from "../state/LibraryProvider";
 import { CATEGORIES, FLEETS, ProcedureSchema, STATUSES, WHO, type Category, type Fleet, type Gate, type Layout, type Procedure, type Row, type RowOverride, type Status, type Who } from "../content/schema";
 import { deriveNumbering } from "../content/numbering";
@@ -120,9 +125,9 @@ function Editor({ initial, shipped }: { initial: Procedure; shipped: Procedure |
   }, [undo, redo]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_OPTS),
+    useSensor(TouchSensor, TOUCH_OPTS),
+    useSensor(KeyboardSensor, KEYBOARD_OPTS),
   );
   const onGateDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
@@ -254,9 +259,9 @@ function GateEditor({ p, gate, numbering, apply, onConvert, onAddBranch, onDelet
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: gate.id });
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_OPTS),
+    useSensor(TouchSensor, TOUCH_OPTS),
+    useSensor(KeyboardSensor, KEYBOARD_OPTS),
   );
   const [collapsed, setCollapsed] = useState(false);
   const onRowDragEnd = (e: DragEndEvent) => {

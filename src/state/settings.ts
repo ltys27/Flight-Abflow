@@ -6,7 +6,31 @@ export type Theme = "dark" | "light" | "system";
 export type TextSize = "small" | "normal" | "large" | "xlarge";
 export type DefaultRole = "PF" | "PM" | "both";
 
+export interface SyncConfig {
+  enabled: boolean;
+  /** "owner/repo" */
+  repo: string;
+  branch: string;
+  /** Folder inside the repo, no leading or trailing slash. */
+  path: string;
+  /** Fine-grained personal access token with Contents read/write on that repo. Stays on this device. */
+  token: string;
+}
+export interface SyncState {
+  ok: boolean;
+  message: string;
+  at: string;
+  pushed?: boolean;
+  pulled?: boolean;
+}
+
+/** Settings that stay on this device: never synced, never written to a backup file. */
+export const DEVICE_ONLY_SETTINGS: ReadonlySet<string> = new Set(["syncConfig", "lastSyncAt", "lastSyncState", "lastBackupAt", "lastDataChangeAt"]);
+
 export interface Settings {
+  syncConfig: SyncConfig | null;
+  lastSyncAt: string | null;
+  lastSyncState: SyncState | null;
   theme: Theme;
   textSize: TextSize;
   defaultRole: DefaultRole;
@@ -28,6 +52,9 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  syncConfig: null,
+  lastSyncAt: null,
+  lastSyncState: null,
   theme: "dark",
   textSize: "normal",
   defaultRole: "PF",
@@ -74,7 +101,8 @@ export function useSetting<K extends keyof Settings>(key: K): Settings[K] {
   return useLiveQuery(() => getSetting(key), [key], DEFAULT_SETTINGS[key]);
 }
 
-/** Mark that user data changed (for the backup reminder). */
+/** Mark that user data changed (backup reminder, and a nudge for auto-sync). */
 export async function touchDataChanged(): Promise<void> {
   await db.settings.put({ key: "lastDataChangeAt", value: nowIso(), updatedAt: nowIso() });
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("flow:data-changed"));
 }

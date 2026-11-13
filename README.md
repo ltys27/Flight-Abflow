@@ -57,6 +57,15 @@ touch the shipped file. When a shipped file's `version` rises above the
 overlay's base, the read view offers keep mine / take shipped (yours is
 exported first) / review a row-by-row diff.
 
+## Sync between devices (optional)
+
+Settings → "Sync with a GitHub repository". Create a **private** repository
+and a fine-grained personal access token restricted to it with
+*Contents: read and write*. Enter `owner/name`, branch, a folder, and the
+token, then Test connection and Sync now. The app keeps one `data.json` in
+that folder plus one file per voice memo under `blobs/`, merges newer
+changes per record and honours deletions. The token stays on the device.
+
 ## Where things are
 
 | Area | Files |

@@ -1,4 +1,4 @@
-import { db, ensurePersisted, type ReviewItemRecord, type ReviewRole } from "../db/db";
+import { db, ensurePersisted, recordTombstone, type ReviewItemRecord, type ReviewRole } from "../db/db";
 import type { Procedure } from "../content/schema";
 import { gradeItem, reviewableItems, type Grade } from "./scheduler";
 import { getSetting } from "../state/settings";
@@ -50,11 +50,14 @@ export async function reconcileReviewItems(p: Procedure): Promise<void> {
   }
   await db.transaction("rw", db.reviewItems, async () => {
     if (toDelete.length) await db.reviewItems.bulkDelete(toDelete);
-    if (toPut.length) await db.reviewItems.bulkPut(toPut);
+    if (toPut.length) await db.reviewItems.bulkPut(toPut.map((it) => ({ ...it, updatedAt: new Date().toISOString() })));
   });
+  for (const [pid, rid, role] of toDelete) await recordTombstone("reviewItems", `${pid}|${rid}|${role}`);
 }
 
 export async function deleteReviewDataFor(procedureId: string): Promise<void> {
+  const items = await db.reviewItems.where("procedureId").equals(procedureId).toArray();
   await db.reviewItems.where("procedureId").equals(procedureId).delete();
   await db.reviewLog.where("procedureId").equals(procedureId).delete();
+  for (const it of items) await recordTombstone("reviewItems", `${it.procedureId}|${it.rowId}|${it.role}`);
 }

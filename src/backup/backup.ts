@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { db, ensurePersisted, TABLE_NAMES } from "../db/db";
 import { nowIso } from "../util/id";
+import { DEVICE_ONLY_SETTINGS } from "../state/settings";
+import { mergeSnapshot } from "../sync/merge";
 
 /** Backup file (spec 9): every table, voice blobs as base64. */
 export const BACKUP_VERSION = 1;
@@ -17,6 +19,7 @@ const BackupSchema = z.object({
   reviewLog: z.array(z.record(z.string(), z.unknown())),
   sessions: z.array(z.record(z.string(), z.unknown())),
   settings: z.array(z.record(z.string(), z.unknown())),
+  tombstones: z.array(z.object({ table: z.string(), key: z.string(), deletedAt: z.string() })).optional(),
 });
 export type BackupFile = z.infer<typeof BackupSchema>;
 
@@ -57,7 +60,8 @@ export async function exportBackup(): Promise<BackupFile> {
     reviewItems: (await db.reviewItems.toArray()) as unknown as Record<string, unknown>[],
     reviewLog: (await db.reviewLog.toArray()) as unknown as Record<string, unknown>[],
     sessions: (await db.sessions.toArray()) as unknown as Record<string, unknown>[],
-    settings: (await db.settings.toArray()) as unknown as Record<string, unknown>[],
+    settings: (await db.settings.toArray()).filter((r) => !DEVICE_ONLY_SETTINGS.has(r.key)) as unknown as Record<string, unknown>[],
+    tombstones: await db.tombstones.toArray(),
   };
 }
 
@@ -80,16 +84,6 @@ export function parseBackup(text: string): { ok: true; backup: BackupFile; summa
   return { ok: true, backup: r.data, summary: { createdAt: r.data.createdAt, counts } };
 }
 
-const keyOf: Record<(typeof TABLE_NAMES)[number], (r: Record<string, unknown>) => unknown> = {
-  overlays: (r) => r.procedureId,
-  userProcedures: (r) => r.procedureId,
-  annotations: (r) => r.id,
-  blobs: (r) => r.id,
-  reviewItems: (r) => [r.procedureId, r.rowId, r.role],
-  reviewLog: (r) => r.id,
-  sessions: (r) => r.id,
-  settings: (r) => r.key,
-};
 
 /**
  * Restore (spec 9). `replace` wipes every table first. `merge` keeps the record
@@ -98,49 +92,50 @@ const keyOf: Record<(typeof TABLE_NAMES)[number], (r: Record<string, unknown>) =
  */
 export async function restoreBackup(b: BackupFile, mode: "merge" | "replace"): Promise<void> {
   await ensurePersisted();
-  const tables = TABLE_NAMES.map((t) => db.table(t));
+  if (mode === "merge") {
+    await mergeSnapshot(
+      {
+        overlays: b.overlays,
+        userProcedures: b.userProcedures,
+        annotations: b.annotations,
+        reviewItems: b.reviewItems,
+        reviewLog: b.reviewLog,
+        sessions: b.sessions,
+        settings: b.settings.filter((r) => !DEVICE_ONLY_SETTINGS.has(String(r.key))),
+        tombstones: b.tombstones ?? [],
+        blobs: b.blobs.map((x) => ({ id: x.id, mime: x.mime, updatedAt: x.updatedAt })),
+      },
+      db,
+      async (id) => {
+        const x = b.blobs.find((bb) => bb.id === id);
+        return x ? base64ToBlob(x.base64, x.mime) : null;
+      },
+    );
+    return;
+  }
+  const tables = [...TABLE_NAMES.map((t) => db.table(t)), db.tombstones];
   await db.transaction("rw", tables, async () => {
-    if (mode === "replace") for (const t of tables) await t.clear();
+    for (const t of tables) await t.clear();
     for (const name of TABLE_NAMES) {
       const table = db.table(name);
-      const incoming = b[name] as Record<string, unknown>[];
-      for (const raw of incoming) {
+      for (const raw of b[name] as Record<string, unknown>[]) {
         const rec: Record<string, unknown> = { ...raw };
         if (name === "blobs") {
           rec.data = base64ToBlob(String(raw.base64), String(raw.mime));
           delete rec.base64;
         }
-        if (name === "reviewLog") {
-          if (mode === "replace") {
-            await table.add(rec);
-          } else {
-            const { id: _id, ...rest } = rec;
-            void _id;
-            const dup = await table.where("[procedureId+rowId+role]").equals([rest.procedureId as string, rest.rowId as string, rest.role as string]).filter((x) => x.reviewedAt === rest.reviewedAt).first();
-            if (!dup) await table.add(rest);
-          }
-          continue;
-        }
-        if (mode === "replace") {
-          await table.put(rec);
-          continue;
-        }
-        const key = keyOf[name](rec);
-        const existing = (await table.get(key as never)) as Record<string, unknown> | undefined;
-        if (!existing) {
-          await table.put(rec);
-          continue;
-        }
-        const a = String(existing.updatedAt ?? "");
-        const c = String(rec.updatedAt ?? "");
-        if (c > a) await table.put(rec);
+        if (name === "reviewLog") delete rec.id;
+        if (name === "settings" && DEVICE_ONLY_SETTINGS.has(String(rec.key))) continue;
+        if (name === "reviewLog") await table.add(rec);
+        else await table.put(rec);
       }
     }
+    if (b.tombstones?.length) await db.tombstones.bulkPut(b.tombstones);
   });
 }
 
 export async function eraseAllData(): Promise<void> {
-  const tables = TABLE_NAMES.map((t) => db.table(t));
+  const tables = [...TABLE_NAMES.map((t) => db.table(t)), db.tombstones];
   await db.transaction("rw", tables, async () => {
     for (const t of tables) await t.clear();
   });

@@ -1,4 +1,4 @@
-import { db, ensurePersisted, type SessionRecord } from "../db/db";
+import { db, ensurePersisted, recordTombstone, type SessionRecord } from "../db/db";
 import { newId, nowIso, todayIso } from "../util/id";
 import { setSetting, touchDataChanged } from "./settings";
 
@@ -18,10 +18,11 @@ export async function setActiveSession(id: string | null): Promise<void> {
 
 export async function deleteSession(id: string): Promise<void> {
   await db.sessions.delete(id);
+  await recordTombstone("sessions", id);
   const active = await db.settings.get("activeSessionId");
   if (active?.value === id) await setSetting("activeSessionId", null);
   // Notes keep their text; they simply lose the session stamp.
   const notes = await db.annotations.where("sessionId").equals(id).toArray();
-  await db.annotations.bulkPut(notes.map((n) => ({ ...n, sessionId: undefined })));
+  await db.annotations.bulkPut(notes.map((n) => ({ ...n, sessionId: undefined, updatedAt: nowIso() })));
   await touchDataChanged();
 }

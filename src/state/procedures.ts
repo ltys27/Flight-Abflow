@@ -1,4 +1,4 @@
-import { db, ensurePersisted, type OverlayRecord } from "../db/db";
+import { clearTombstone, db, ensurePersisted, recordTombstone, type OverlayRecord } from "../db/db";
 import type { Procedure } from "../content/schema";
 import { nowIso } from "../util/id";
 import { touchDataChanged } from "./settings";
@@ -50,8 +50,10 @@ export async function saveProcedure(p: Procedure, shipped: Procedure | undefined
       baseVersion: existing?.baseVersion ?? shipped.version,
       updatedAt,
     });
+    await clearTombstone("overlays", p.id);
   } else {
     await db.userProcedures.put({ procedureId: p.id, procedure: p, updatedAt });
+    await clearTombstone("userProcedures", p.id);
   }
   await touchDataChanged();
 }
@@ -63,17 +65,20 @@ export async function createUserProcedure(p: Procedure, shippedIds: Set<string>)
     throw new Error(`A procedure with id "${p.id}" already exists`);
   }
   await db.userProcedures.put({ procedureId: p.id, procedure: p, updatedAt: nowIso() });
+  await clearTombstone("userProcedures", p.id);
   await touchDataChanged();
 }
 
 export async function deleteUserProcedure(id: string): Promise<void> {
   await db.userProcedures.delete(id);
+  await recordTombstone("userProcedures", id);
   await touchDataChanged();
 }
 
 /** "Take shipped": drop the overlay so the shipped file shows again. */
 export async function discardOverlay(id: string): Promise<void> {
   await db.overlays.delete(id);
+  await recordTombstone("overlays", id);
   await touchDataChanged();
 }
 

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useSettings, setSetting, type Theme, type TextSize, type DefaultRole } from "../state/settings";
+import { useSettings, setSetting, type Theme, type TextSize, type DefaultRole, type SyncConfig } from "../state/settings";
+import { githubClient } from "../sync/github";
+import { syncNow } from "../sync/sync";
 import { useLibrary } from "../state/LibraryProvider";
 import { exportBackup, parseBackup, restoreBackup, eraseAllData, storageEstimate, type BackupSummary, type BackupFile } from "../backup/backup";
 import { downloadText } from "../edit/export";
@@ -19,6 +21,15 @@ export function SettingsScreen() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const [offline, setOffline] = useState<OfflineStatus | null>(null);
+  const [syncDraft, setSyncDraft] = useState<SyncConfig | null>(null);
+  const [syncBusy, setSyncBusy] = useState<"" | "test" | "sync">("");
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const sync: SyncConfig = syncDraft ?? s.syncConfig ?? { enabled: false, repo: "", branch: "main", path: "flow-scripts", token: "" };
+  const editSync = (patch: Partial<SyncConfig>) => setSyncDraft({ ...sync, ...patch });
+  const saveSync = async (next: SyncConfig) => {
+    await setSetting("syncConfig", next);
+    setSyncDraft(null);
+  };
   const [preparing, setPreparing] = useState(false);
   useEffect(() => {
     void getOfflineStatus().then(setOffline);
@@ -118,6 +129,32 @@ export function SettingsScreen() {
           </div>
         )}
         <button type="button" className="btn small" style={{ marginTop: 8 }} onClick={async () => { try { await navigator.storage?.persist?.(); } catch { /* ignore */ } setStorage(await storageEstimate()); }}>Request persistent storage</button>
+      </section>
+      <section className="card" aria-label="Sync">
+        <h2 style={{ marginTop: 0 }}>Sync with a GitHub repository</h2>
+        <p className="small muted">Optional. Keeps every device with the same notes, edits and review history by storing them as files in a repository you own. Use a <strong>private</strong> repository and a fine-grained personal access token limited to that repository with Contents: read and write. The token stays on this device and is never included in backups or sync files.</p>
+        <label className="field" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input type="checkbox" checked={sync.enabled} onChange={(e) => { const next = { ...sync, enabled: e.target.checked }; void saveSync(next); if (next.enabled && next.token) void syncNow("enabled"); }} style={{ width: 24, height: 24, minHeight: 0 }} />
+          <span style={{ margin: 0 }}>Enable sync</span>
+        </label>
+        <label className="field"><span>Repository (owner/name)</span><input type="text" value={sync.repo} placeholder="ltys27/flight-data" autoCapitalize="none" autoCorrect="off" onChange={(e) => editSync({ repo: e.target.value.trim() })} /></label>
+        <div className="edit-grid two">
+          <label className="field"><span>Branch</span><input type="text" value={sync.branch} onChange={(e) => editSync({ branch: e.target.value.trim() })} /></label>
+          <label className="field"><span>Folder in the repository</span><input type="text" value={sync.path} placeholder="flow-scripts" onChange={(e) => editSync({ path: e.target.value.trim() })} /></label>
+        </div>
+        <label className="field"><span>Personal access token</span><input type="password" value={sync.token} autoComplete="off" onChange={(e) => editSync({ token: e.target.value.trim() })} /></label>
+        <div className="row-actions">
+          {syncDraft && <button type="button" className="btn small primary" onClick={() => void saveSync(sync)}>Save settings</button>}
+          <button type="button" className="btn small" disabled={!sync.repo || !sync.token || syncBusy !== ""} onClick={async () => { setSyncBusy("test"); const r = await githubClient(sync).test(); setSyncMsg(r.message); setSyncBusy(""); }}>{syncBusy === "test" ? "Testing…" : "Test connection"}</button>
+          <button type="button" className="btn small" disabled={!s.syncConfig?.enabled || !s.syncConfig.token || syncBusy !== ""} onClick={async () => { if (syncDraft) await saveSync(sync); setSyncBusy("sync"); const r = await syncNow("manual"); setSyncMsg(r.message); setSyncBusy(""); }}>{syncBusy === "sync" ? "Syncing…" : "Sync now"}</button>
+        </div>
+        {syncMsg && <p className="small" role="status">{syncMsg}</p>}
+        {s.lastSyncState && (
+          <p className={`small ${s.lastSyncState.ok ? "muted" : ""}`} style={s.lastSyncState.ok ? undefined : { color: "var(--danger)" }}>
+            Last sync {new Date(s.lastSyncState.at).toLocaleString()}: {s.lastSyncState.message}
+          </p>
+        )}
+        {s.syncConfig?.enabled && <p className="small muted">Syncs on launch, when the device comes back online, about 15 seconds after a change, and every 10 minutes while open. Newer changes win per item; deletions are kept.</p>}
       </section>
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Backup and restore</h2>

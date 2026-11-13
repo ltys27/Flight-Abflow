@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+
+/** Stable sensor options: new objects each render would re-create sensors and cancel an in-progress drag. */
+const POINTER_OPTS = { activationConstraint: { distance: 6 } };
+const TOUCH_OPTS = { activationConstraint: { delay: 150, tolerance: 8 } };
+const KEYBOARD_OPTS = { coordinateGetter: sortableKeyboardCoordinates };
 import { GradeBar } from "./GradeBar";
 import { countMisplaced, itemText, orderGrade, shuffle, type DrillItem } from "./items";
 import type { Grade } from "../schedule/scheduler";
@@ -125,9 +130,9 @@ export function OrderMode({ items, onGraded }: { items: DrillItem[]; onGraded: (
   });
   const [result, setResult] = useState<{ misplaced: number } | null>(null);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(PointerSensor, POINTER_OPTS),
+    useSensor(TouchSensor, TOUCH_OPTS),
+    useSensor(KeyboardSensor, KEYBOARD_OPTS),
   );
   const byId = new Map(rows.map((r) => [r.id, r]));
   const onDragEnd = (e: DragEndEvent) => {

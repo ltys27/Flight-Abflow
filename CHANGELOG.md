@@ -100,6 +100,15 @@
   vs browser tab, Prepare offline / Check again) and a one-time "Ready to
   work offline" notice.
 
+- Optional sync with a private GitHub repository (Settings → Sync): a
+  fine-grained token kept on the device, one `data.json` per folder plus one
+  file per voice memo, pulled and merged (newer wins per record) then pushed
+  when anything differs; sha-based conflict retry. Deletions are carried by
+  tombstones so a note removed on one device stays removed everywhere.
+  Runs on launch, when back online, after changes and every 10 minutes.
+  Sync and token settings never leave the device, in sync files or backups.
+  Database schema version 2 adds the tombstones table.
+
 ## Decisions the spec did not cover
 1. A lane cell counts as "completely empty" only with no action, no callout
    and not standing; callout-only cells are allowed.
@@ -138,6 +147,9 @@
 14. Dependencies added beyond the spec list (all MIT or Apache-2.0, no keys):
     `dexie-react-hooks`, `nanoid`, `tsx` (dev), `fake-indexeddb` (dev),
     `@playwright/test` (dev). Routing is a small hand-written hash router.
+16. Sync is a deliberate exception to the spec's "no network calls" rule,
+    requested by the user: it is off by default and, when on, talks only to
+    api.github.com for the configured repository.
 15. The service worker claims clients on first install (`clientsClaim`) so a
     single visit is enough for an offline cold start; updates still wait for
     the user's "Reload".

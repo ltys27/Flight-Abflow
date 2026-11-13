@@ -65,6 +65,12 @@ export interface SettingRecord {
   value: unknown;
   updatedAt: string;
 }
+/** Deletion marker so a delete on one device wins over an older copy elsewhere. */
+export interface TombstoneRecord {
+  table: string;
+  key: string;
+  deletedAt: string;
+}
 
 export class FlowDb extends Dexie {
   overlays!: EntityTable<OverlayRecord, "procedureId">;
@@ -75,10 +81,11 @@ export class FlowDb extends Dexie {
   reviewLog!: EntityTable<ReviewLogRecord, "id">;
   sessions!: EntityTable<SessionRecord, "id">;
   settings!: EntityTable<SettingRecord, "key">;
+  tombstones!: Dexie.Table<TombstoneRecord, [string, string]>;
 
   constructor(name = "flow-scripts") {
     super(name);
-    this.version(1).stores({
+    const stores = {
       overlays: "procedureId, updatedAt",
       userProcedures: "procedureId, updatedAt",
       annotations: "id, target.procedureId, target.rowId, kind, sessionId, tag, updatedAt",
@@ -87,7 +94,9 @@ export class FlowDb extends Dexie {
       reviewLog: "++id, procedureId, reviewedAt, [procedureId+rowId+role]",
       sessions: "id, createdAt",
       settings: "key",
-    });
+    };
+    this.version(1).stores(stores);
+    this.version(2).stores({ ...stores, tombstones: "[table+key], deletedAt" });
   }
 }
 
@@ -103,6 +112,35 @@ export const TABLE_NAMES = [
   "sessions",
   "settings",
 ] as const;
+
+/** Tables that take part in sync and merge (tombstones are handled separately). */
+export type SyncedTable = (typeof TABLE_NAMES)[number];
+
+/** Primary key of a record as a string, for tombstones. */
+export function recordKey(table: SyncedTable, r: Record<string, unknown>): string {
+  switch (table) {
+    case "overlays":
+    case "userProcedures":
+      return String(r.procedureId);
+    case "reviewItems":
+      return `${r.procedureId}|${r.rowId}|${r.role}`;
+    case "reviewLog":
+      return `${r.procedureId}|${r.rowId}|${r.role}|${r.reviewedAt}`;
+    case "settings":
+      return String(r.key);
+    default:
+      return String(r.id);
+  }
+}
+
+/** Record that a row was deleted, so sync and merge do not resurrect it. */
+export async function recordTombstone(table: SyncedTable, key: string, database: FlowDb = db): Promise<void> {
+  await database.tombstones.put({ table, key, deletedAt: new Date().toISOString() });
+}
+
+export async function clearTombstone(table: SyncedTable, key: string, database: FlowDb = db): Promise<void> {
+  await database.tombstones.delete([table, key]);
+}
 
 let persistAsked = false;
 /** Ask for durable storage on first write (spec 4). */
