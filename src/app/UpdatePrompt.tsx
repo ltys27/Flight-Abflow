@@ -32,7 +32,7 @@ export function UpdatePrompt() {
   }
   if (readyNotice) {
     return (
-      <div className="toast" role="status" style={{ bottom: "calc(120px + env(safe-area-inset-bottom))" }}>
+      <div className="toast notice" role="status">
         <span>Ready to work offline</span>
       </div>
     );

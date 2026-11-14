@@ -50,7 +50,7 @@ export function navigate(to: string): void {
 export const href = {
   library: () => "#/",
   read: (id: string, rowId?: string) => `#/p/${encodeURIComponent(id)}${rowId ? `?row=${encodeURIComponent(rowId)}` : ""}`,
-  edit: (id: string) => `#/p/${encodeURIComponent(id)}/edit`,
+  edit: (id: string, rowId?: string) => `#/p/${encodeURIComponent(id)}/edit${rowId ? `?row=${encodeURIComponent(rowId)}` : ""}`,
   drill: (id: string) => `#/p/${encodeURIComponent(id)}/drill`,
   review: () => "#/review",
   openItems: () => "#/open-items",

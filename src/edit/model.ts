@@ -1,12 +1,108 @@
-import type { Gate, Layout, Procedure, Row, Who } from "../content/schema";
+import type { Gate, LaneCell, Layout, Procedure, Row, Who } from "../content/schema";
 import { newId } from "../util/id";
 
 /** Pure editing operations on a procedure (spec 6.3). Every function returns a new object. */
 
 export const blankRow = (layout: Layout): Row =>
   layout === "two-lane"
-    ? { id: newId(), trigger: "", pf: { action: "" }, pm: { action: "" }, status: "to-fill", statusNote: "New row" }
-    : { id: newId(), trigger: "", action: "", who: "UNASSIGNED", status: "to-fill", statusNote: "New row" };
+    ? { id: newId(), trigger: "", pf: { action: "" }, pm: { action: "" }, status: "to-fill" }
+    : { id: newId(), trigger: "", action: "", who: "UNASSIGNED", status: "to-fill" };
+
+export const UNTITLED_GATE = "Untitled gate";
+
+/** Notes written by the app itself; a row carrying one of these is "to-fill" only because it is unfinished. */
+const AUTO_NOTE = /^(New row|Template row|Imported with an empty cell|Converted from single-lane.*)$/;
+
+const cellEmpty = (c: LaneCell | undefined) => !c || (c.action.trim() === "" && (c.callout ?? "").trim() === "" && !c.standing);
+
+/** A row is incomplete while a lane has nothing in it (and is not a standing task). */
+export function rowIncomplete(layout: Layout, r: Row): boolean {
+  if (layout === "two-lane") return cellEmpty(r.pf) || cellEmpty(r.pm);
+  return (r.action ?? "").trim() === "" && (r.callout ?? "").trim() === "";
+}
+
+/**
+ * Status follows content so the author never has to manage it by hand:
+ * an incomplete row is "to-fill"; once complete it becomes "ok", unless the
+ * author left their own note on it. Returns the same object when nothing changes.
+ */
+export function autoStatusRow(layout: Layout, r: Row): Row {
+  if (rowIncomplete(layout, r)) return r.status === "to-fill" ? r : { ...r, status: "to-fill" };
+  if (r.status === "to-fill" && (!r.statusNote || AUTO_NOTE.test(r.statusNote))) {
+    const { statusNote: _n, ...rest } = r;
+    void _n;
+    return { ...rest, status: "ok" };
+  }
+  return r;
+}
+
+/** Apply autoStatusRow to every row, preserving object identity where nothing changed. */
+export function autoStatus(p: Procedure): Procedure {
+  let changed = false;
+  const gates = p.gates.map((g) => {
+    let gateChanged = false;
+    const rows = g.rows.map((r) => {
+      const n = autoStatusRow(g.layout, r);
+      if (n !== r) gateChanged = true;
+      return n;
+    });
+    if (!gateChanged) return g;
+    changed = true;
+    return { ...g, rows };
+  });
+  return changed ? { ...p, gates } : p;
+}
+
+/**
+ * Make a draft storable without bothering the author: blank titles get a
+ * neutral placeholder instead of failing validation. No row text is touched.
+ */
+export function prepareForSave(p: Procedure, fallbackTitle: string): Procedure {
+  const a = autoStatus(p);
+  return {
+    ...a,
+    title: a.title.trim() || fallbackTitle || "Untitled procedure",
+    gates: a.gates.map((g) => ({
+      ...g,
+      title: g.title.trim() || UNTITLED_GATE,
+      ...(g.branch ? { branch: { ...g.branch, condition: g.branch.condition.trim() || "Untitled branch" } } : {}),
+    })),
+    referenceTables: a.referenceTables.map((t) => ({ ...t, title: t.title.trim() || "Table", rows: t.rows.map((r) => t.columns.map((_, i) => r[i] ?? "")) })),
+    ...(a.profile ? { profile: a.profile.map((pt) => ({ ...pt, label: pt.label.trim() || "Point" })) } : {}),
+  };
+}
+
+/** True when a row holds nothing at all: no trigger and nothing in any lane. */
+export function rowBlank(r: Row): boolean {
+  const cellBlank = (c: LaneCell | undefined) => !c || (!c.action.trim() && !(c.callout ?? "").trim() && !c.standing);
+  return !r.trigger.trim() && cellBlank(r.pf) && cellBlank(r.pm) && !(r.action ?? "").trim() && !(r.callout ?? "").trim();
+}
+
+/** Drop the listed rows if they are still completely blank (rows auto-added by Return and never used). */
+export function dropUnusedRows(p: Procedure, ids: ReadonlySet<string>): Procedure {
+  if (ids.size === 0) return p;
+  let changed = false;
+  const gates = p.gates.map((g) => {
+    const rows = g.rows.filter((r) => !(ids.has(r.id) && rowBlank(r)));
+    if (rows.length === g.rows.length) return g;
+    changed = true;
+    return { ...g, rows };
+  });
+  return changed ? { ...p, gates } : p;
+}
+
+export function moveRow(p: Procedure, gateId: string, rowId: string, dir: -1 | 1): Procedure {
+  const g = p.gates.find((x) => x.id === gateId);
+  const i = g?.rows.findIndex((r) => r.id === rowId) ?? -1;
+  if (!g || i < 0 || i + dir < 0 || i + dir >= g.rows.length) return p;
+  return reorderRows(p, gateId, i, i + dir);
+}
+
+export function moveGate(p: Procedure, gateId: string, dir: -1 | 1): Procedure {
+  const i = p.gates.findIndex((g) => g.id === gateId);
+  if (i < 0 || i + dir < 0 || i + dir >= p.gates.length) return p;
+  return reorderGates(p, i, i + dir);
+}
 
 export const blankGate = (layout: Layout = "two-lane", title = "New gate"): Gate => ({ id: newId(), title, layout, rows: [] });
 
@@ -19,7 +115,7 @@ export const blankProcedure = (id: string, title: string, category: Procedure["c
   tags: [],
   version: 1,
   relatedProcedures: [],
-  gates: [blankGate("two-lane", "Gate 1")],
+  gates: [{ ...blankGate("two-lane", ""), rows: [blankRow("two-lane")] }],
   referenceTables: [],
 });
 
@@ -86,8 +182,8 @@ export function reorderGates(p: Procedure, from: number, to: number): Procedure 
   return { ...p, gates };
 }
 
-export function addGate(p: Procedure, afterGateId?: string, layout: Layout = "two-lane"): Procedure {
-  const g = blankGate(layout);
+export function addGate(p: Procedure, afterGateId?: string, layout: Layout = "two-lane", gate?: Gate): Procedure {
+  const g = gate ?? blankGate(layout);
   const i = afterGateId ? p.gates.findIndex((x) => x.id === afterGateId) : p.gates.length - 1;
   const gates = [...p.gates];
   gates.splice(i + 1, 0, g);
@@ -95,7 +191,7 @@ export function addGate(p: Procedure, afterGateId?: string, layout: Layout = "tw
 }
 
 export function addBranch(p: Procedure, parentGateId: string, condition: string, layout: Layout = "two-lane"): Procedure {
-  const g: Gate = { ...blankGate(layout, condition), branch: { parentGateId, condition } };
+  const g: Gate = { ...blankGate(layout, condition), rows: [blankRow(layout)], branch: { parentGateId, condition } };
   // Place after the parent's existing branches (or the parent itself).
   let i = p.gates.findIndex((x) => x.id === parentGateId);
   for (let k = i + 1; k < p.gates.length; k++) if (p.gates[k]!.branch?.parentGateId === parentGateId) i = k;
@@ -189,7 +285,7 @@ export function duplicateProcedure(src: Procedure, id: string, title: string, cl
         delete r.sourceRef;
         delete r.variants;
         r.status = "to-fill";
-        r.statusNote = "Template row";
+        delete r.statusNote;
       }
     }
   }

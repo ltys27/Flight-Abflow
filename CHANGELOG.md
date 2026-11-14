@@ -109,6 +109,28 @@
   Sync and token settings never leave the device, in sync files or backups.
   Database schema version 2 adds the tombstones table.
 
+- Authoring redesign (user feedback: building a procedure was painful; one
+  empty row measured 729 px on a 780 px phone screen):
+  - The editor now looks like the script and is typed in place: auto-growing
+    borderless fields, PF left and PM right on phones, Trigger/PF/PM columns
+    on tablets. Tools appear only on the row being worked on.
+  - Return moves to the next box and opens a new row at the end of a gate.
+  - Status follows content: a row is "to fill" while a lane is empty and
+    becomes "ok" by itself; "verify" is one tap with a note. Empty lanes are
+    outlined, with a Standing toggle per lane.
+  - Saving never blocks: blank titles get neutral placeholders; rows the
+    editor opened itself are dropped from the saved copy while still blank.
+  - Edits are flushed when leaving the editor or backgrounding the app
+    (previously Done within 0.7 s of typing could lose the last edit).
+  - Undo works per phrase instead of per character.
+  - Paste rows: `Trigger | PF | PM` lines, tab-separated or Markdown tables,
+    "quoted" text as the callout, `-` for a standing lane, with a preview.
+  - New procedure: name, category and fleets only (id is automatic), lands in
+    the editor with the first gate and row focused; "Paste or import" accepts
+    plain rows, Markdown tables or JSON in one box.
+  - "Edit this row's text" from a row's action sheet in the read view.
+  - Controls stay at 16 px or more so iOS no longer zooms on focus.
+
 ## Decisions the spec did not cover
 1. A lane cell counts as "completely empty" only with no action, no callout
    and not standing; callout-only cells are allowed.

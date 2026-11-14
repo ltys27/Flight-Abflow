@@ -1,151 +1,171 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLibrary } from "../state/LibraryProvider";
 import { CATEGORIES, FLEETS, ProcedureSchema, type Category, type Fleet, type Procedure } from "../content/schema";
-import { blankProcedure, duplicateProcedure } from "../edit/model";
-import { importJson, importMarkdown, slugify, type ImportSummary } from "../edit/import";
+import { blankProcedure, duplicateProcedure, prepareForSave } from "../edit/model";
+import { importJson, importMarkdown, slugify } from "../edit/import";
+import { parseQuickRows } from "../edit/quickAdd";
 import { createUserProcedure } from "../state/procedures";
 import { href } from "../app/router";
-import { useToast } from "../components/Toast";
-import type { UnparsedLine } from "../import/markdown";
-import type { ValidationIssue } from "../content/validate";
+import { newId } from "../util/id";
+import { rowCount } from "../content/resolve";
 
-type Mode = "blank" | "template" | "json" | "markdown";
+type Mode = "blank" | "copy" | "import";
+
+interface Preview {
+  procedure: Procedure;
+  kind: "JSON" | "Markdown tables" | "plain rows";
+  problems: string[];
+  clash: boolean;
+}
 
 export function NewProcedureScreen() {
   const lib = useLibrary();
-  const toast = useToast();
-  const existing = new Set(lib.entries.map((e) => e.id));
+  const existing = useMemo(() => new Set(lib.entries.map((e) => e.id)), [lib.entries]);
   const [mode, setMode] = useState<Mode>("blank");
   const [title, setTitle] = useState("");
-  const [id, setId] = useState("");
-  const [idTouched, setIdTouched] = useState(false);
+  const [customId, setCustomId] = useState<string | null>(null);
   const [category, setCategory] = useState<Category>("MISC");
   const [fleets, setFleets] = useState<Fleet[]>([...FLEETS]);
   const [templateId, setTemplateId] = useState("");
   const [clear, setClear] = useState(true);
   const [text, setText] = useState("");
-  const [preview, setPreview] = useState<{ procedure: Procedure; summary: ImportSummary; unparsed: UnparsedLine[] } | null>(null);
-  const [issues, setIssues] = useState<ValidationIssue[]>([]);
-  const effectiveId = idTouched ? id : slugify(title);
-  const clash = existing.has(effectiveId);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [error, setError] = useState<string[]>([]);
+
+  const unique = (base: string) => {
+    const b = base || "procedure";
+    if (!existing.has(b)) return b;
+    let n = 2;
+    while (existing.has(`${b}-${n}`)) n += 1;
+    return `${b}-${n}`;
+  };
+  const id = customId ?? unique(slugify(title));
+  const idClash = existing.has(id);
+  const isJson = text.trim().startsWith("{");
 
   const finish = async (p: Procedure) => {
-    const v = ProcedureSchema.safeParse(p);
-    if (!v.success) {
-      setIssues(v.error.issues.map((i) => ({ file: "new", path: i.path.join("."), message: i.message })));
-      return;
-    }
+    const v = ProcedureSchema.safeParse(prepareForSave(p, p.title));
+    if (!v.success) return setError(v.error.issues.map((i) => `${i.path.join(".") || "file"}: ${i.message}`));
     try {
       await createUserProcedure(v.data, lib.shippedIds);
-      toast.show("Procedure created");
       window.location.hash = href.edit(v.data.id);
     } catch (e) {
-      setIssues([{ file: "new", path: "id", message: (e as Error).message }]);
+      setError([(e as Error).message]);
     }
   };
 
   const buildPreview = () => {
-    setIssues([]);
-    if (mode === "json") {
+    setError([]);
+    setPreview(null);
+    if (isJson) {
       const r = importJson(text, existing);
-      if (!r.ok) return setIssues(r.issues);
-      setPreview({ procedure: r.procedure, summary: r.summary, unparsed: [] });
-    } else {
-      if (!effectiveId || !title) return setIssues([{ file: "new", path: "title", message: "Give the procedure a title first" }]);
-      const r = importMarkdown(text, { id: effectiveId, title, category, fleets }, existing);
-      setPreview(r);
+      if (!r.ok) return setError(r.issues.map((i) => `${i.path}: ${i.message}`));
+      const clash = r.summary.idClash;
+      setPreview({ procedure: clash ? { ...r.procedure, id: unique(r.procedure.id) } : r.procedure, kind: "JSON", problems: clash ? [`A procedure with id “${r.procedure.id}” already exists, so this one will be added as a separate copy.`] : [], clash });
+      return;
     }
+    if (!title.trim()) return setError(["Give the procedure a name first."]);
+    const md = importMarkdown(text, { id, title: title.trim(), category, fleets }, existing);
+    if (md.procedure.gates.length > 0) {
+      setPreview({ procedure: md.procedure, kind: "Markdown tables", problems: md.unparsed.map((u) => `Line ${u.line} skipped: ${u.reason}`), clash: false });
+      return;
+    }
+    const q = parseQuickRows(text, "two-lane", newId);
+    if (q.rows.length === 0) return setError(["Nothing recognisable. Use one row per line, like: Trigger | PF | PM"]);
+    const p = blankProcedure(id, title.trim(), category, fleets);
+    p.gates[0]!.rows = q.rows;
+    setPreview({ procedure: p, kind: "plain rows", problems: q.skipped.map((s) => `Line ${s.line} skipped: ${s.reason}`), clash: false });
   };
 
-  const metaFields = (
+  const nameAndType = (
     <>
-      <label className="field"><span>Title</span><input type="text" value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
-      <label className="field"><span>Id (kebab-case, never changes)</span><input type="text" value={effectiveId} onChange={(e) => { setIdTouched(true); setId(slugify(e.target.value)); }} /></label>
-      {clash && <p className="banner danger">A procedure with this id already exists.</p>}
-      <label className="field"><span>Category</span>
-        <select value={category} onChange={(e) => setCategory(e.target.value as Category)}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
+      <label className="field"><span>Name</span>
+        <input type="text" value={title} onChange={(e) => { setTitle(e.target.value); setPreview(null); }} placeholder="Name of the procedure" autoFocus enterKeyHint="done" />
       </label>
-      <div className="chips" role="group" aria-label="Fleets">
-        {FLEETS.map((f) => (
-          <button key={f} type="button" className="chip" aria-pressed={fleets.includes(f)} onClick={() => setFleets(fleets.includes(f) ? fleets.filter((x) => x !== f) : [...fleets, f])}>{f}</button>
-        ))}
+      <div className="field"><span className="small muted">Category</span>
+        <div className="chips" role="group" aria-label="Category">
+          {CATEGORIES.map((c) => <button key={c} type="button" className="chip" aria-pressed={category === c} onClick={() => setCategory(c)}>{c}</button>)}
+        </div>
       </div>
+      <div className="field"><span className="small muted">Fleets</span>
+        <div className="chips" role="group" aria-label="Fleets">
+          {FLEETS.map((f) => <button key={f} type="button" className="chip" aria-pressed={fleets.includes(f)} onClick={() => setFleets(fleets.includes(f) ? fleets.filter((x) => x !== f) : [...fleets, f])}>{f}</button>)}
+        </div>
+      </div>
+      <details className="small">
+        <summary className="muted">Advanced</summary>
+        <label className="field"><span>Id (fixed once created; used in exports and sync)</span>
+          <input type="text" value={id} autoCapitalize="none" onChange={(e) => setCustomId(slugify(e.target.value))} />
+        </label>
+        {idClash && <p style={{ color: "var(--danger)" }}>That id is already used.</p>}
+      </details>
     </>
   );
 
   return (
     <>
       <h1>New procedure</h1>
-      <div className="chips" role="tablist" aria-label="Source">
-        {(["blank", "template", "json", "markdown"] as Mode[]).map((m) => (
-          <button key={m} type="button" role="tab" aria-selected={mode === m} className="chip" aria-pressed={mode === m} onClick={() => { setMode(m); setPreview(null); setIssues([]); }}>
-            {m === "blank" ? "Blank" : m === "template" ? "From existing" : m === "json" ? "Import JSON" : "Import Markdown"}
-          </button>
+      <div className="chips" role="tablist" aria-label="How to start">
+        {([["blank", "Start blank"], ["copy", "Copy another"], ["import", "Paste or import"]] as Array<[Mode, string]>).map(([m, label]) => (
+          <button key={m} type="button" role="tab" aria-selected={mode === m} className="chip" aria-pressed={mode === m} onClick={() => { setMode(m); setPreview(null); setError([]); }}>{label}</button>
         ))}
       </div>
-      <div className="card">
-        {mode === "blank" && (
-          <form onSubmit={(e) => { e.preventDefault(); void finish(blankProcedure(effectiveId, title, category, fleets)); }}>
-            {metaFields}
-            <button type="submit" className="btn primary" disabled={!title || !effectiveId || clash}>Create</button>
-          </form>
-        )}
-        {mode === "template" && (
-          <form onSubmit={(e) => { e.preventDefault(); const src = lib.get(templateId)?.procedure; if (src) void finish(duplicateProcedure(src, effectiveId, title, clear)); }}>
-            <label className="field"><span>Copy structure from</span>
-              <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} required><option value="">Choose…</option>{lib.entries.map((e) => <option key={e.id} value={e.id}>{e.procedure.title}</option>)}</select>
-            </label>
-            <label className="field"><span>Content</span>
-              <select value={clear ? "clear" : "keep"} onChange={(e) => setClear(e.target.value === "clear")}><option value="clear">Clear row text, keep gates and row count</option><option value="keep">Keep everything (full copy)</option></select>
-            </label>
-            {metaFields}
-            <button type="submit" className="btn primary" disabled={!title || !effectiveId || clash || !templateId}>Create</button>
-          </form>
-        )}
-        {(mode === "json" || mode === "markdown") && (
-          <div>
-            {mode === "markdown" && metaFields}
-            <label className="field"><span>{mode === "json" ? "Procedure JSON" : "Markdown (## headings and | # | Trigger | PF | PM | tables)"}</span>
-              <textarea value={text} onChange={(e) => { setText(e.target.value); setPreview(null); }} style={{ minHeight: 160, fontFamily: "ui-monospace, monospace" }} />
-            </label>
-            <div className="row-actions">
-              <label className="btn">Choose file…<input type="file" accept=".json,.md,.txt,application/json,text/markdown" className="visually-hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setText(await f.text()); setPreview(null); if (mode === "markdown" && !title) setTitle(f.name.replace(/\.[^.]+$/, "")); } }} /></label>
-              <button type="button" className="btn primary" onClick={buildPreview} disabled={!text.trim()}>Validate and preview</button>
+
+      {mode === "blank" && (
+        <form className="card" onSubmit={(e) => { e.preventDefault(); if (title.trim() && !idClash) void finish(blankProcedure(id, title.trim(), category, fleets)); }}>
+          {nameAndType}
+          <button type="submit" className="btn primary wide" disabled={!title.trim() || idClash}>Create and start writing</button>
+          <p className="small muted">You'll land in the editor with the first gate and row ready to type into.</p>
+        </form>
+      )}
+
+      {mode === "copy" && (
+        <form className="card" onSubmit={(e) => { e.preventDefault(); const src = lib.get(templateId)?.procedure; if (src && title.trim() && !idClash) void finish(duplicateProcedure(src, id, title.trim(), clear)); }}>
+          <label className="field"><span>Copy from</span>
+            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} required><option value="">Choose…</option>{lib.entries.map((e) => <option key={e.id} value={e.id}>{e.procedure.title}</option>)}</select>
+          </label>
+          <div className="chips" role="group" aria-label="What to copy">
+            <button type="button" className="chip" aria-pressed={clear} onClick={() => setClear(true)}>Layout only (empty rows)</button>
+            <button type="button" className="chip" aria-pressed={!clear} onClick={() => setClear(false)}>Everything</button>
+          </div>
+          {nameAndType}
+          <button type="submit" className="btn primary wide" disabled={!title.trim() || idClash || !templateId}>Create copy</button>
+        </form>
+      )}
+
+      {mode === "import" && (
+        <div className="card">
+          <p className="small muted">Paste what you already have: plain rows (<code>Trigger | PF | PM</code>, spoken words in "quotes"), Markdown tables under <code>## Gate</code> headings, or an exported JSON file.</p>
+          <label className="field"><span>Paste here</span>
+            <textarea value={text} onChange={(e) => { setText(e.target.value); setPreview(null); }} style={{ minHeight: 160 }} />
+          </label>
+          <label className="btn">Choose a file…<input type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" className="visually-hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setText(await f.text()); setPreview(null); if (!title) setTitle(f.name.replace(/\.[^.]+$/, "")); } }} /></label>
+          {!isJson && nameAndType}
+          <div className="row-actions" style={{ marginTop: 8 }}>
+            <button type="button" className="btn primary" onClick={buildPreview} disabled={!text.trim()}>Preview</button>
+          </div>
+          {preview && (
+            <div className="banner" role="region" aria-label="Import preview">
+              <strong>{preview.procedure.title}</strong>
+              <div className="small muted">Read as {preview.kind} · {preview.procedure.gates.length} {preview.procedure.gates.length === 1 ? "gate" : "gates"} · {rowCount(preview.procedure)} rows</div>
+              <ul className="small">{preview.procedure.gates.map((g) => <li key={g.id}>{g.title || "Untitled gate"}: {g.rows.length} rows</li>)}</ul>
+              {preview.problems.length > 0 && <ul className="small" style={{ color: "var(--warn)" }}>{preview.problems.map((x, i) => <li key={i}>{x}</li>)}</ul>}
+              {preview.clash && (
+                <label className="field"><span>Import under a different id</span>
+                  <input type="text" value={preview.procedure.id} autoCapitalize="none" onChange={(e) => setPreview({ ...preview, procedure: { ...preview.procedure, id: slugify(e.target.value) } })} />
+                </label>
+              )}
+              <button type="button" className="btn primary wide" disabled={!preview.procedure.id || existing.has(preview.procedure.id)} onClick={() => void finish(preview.procedure)}>Create</button>
             </div>
-          </div>
-        )}
-        {issues.length > 0 && (
-          <div className="banner danger" role="alert">
-            <strong>Could not import</strong>
-            <ul className="small">{issues.map((i, k) => <li key={k}><code>{i.path || "$"}</code>: {i.message}</li>)}</ul>
-          </div>
-        )}
-        {preview && (
-          <div className="banner" role="region" aria-label="Import preview">
-            <div className="kv small">
-              <span>Title</span><span>{preview.summary.title}</span>
-              <span>Id</span><span>{preview.summary.id}{preview.summary.idClash && <strong style={{ color: "var(--danger)" }}> — already exists</strong>}</span>
-              <span>Gates</span><span>{preview.summary.gates}</span>
-              <span>Rows</span><span>{preview.summary.rows}</span>
-            </div>
-            {preview.summary.idClash && mode === "json" && (
-              <label className="field"><span>Import under a different id</span>
-                <input type="text" placeholder="new-id" onChange={(e) => setPreview({ ...preview, procedure: { ...preview.procedure, id: slugify(e.target.value) }, summary: { ...preview.summary, id: slugify(e.target.value), idClash: existing.has(slugify(e.target.value)) } })} />
-              </label>
-            )}
-            {preview.unparsed.length > 0 && (
-              <div>
-                <strong>Lines that could not be parsed ({preview.unparsed.length})</strong>
-                <ul className="small">{preview.unparsed.map((u) => <li key={u.line}>line {u.line}: {u.reason} — <code>{u.text.slice(0, 80)}</code></li>)}</ul>
-              </div>
-            )}
-            <ul className="small">
-              {preview.procedure.gates.map((g) => <li key={g.id}>{g.title || "(untitled)"} — {g.layout}, {g.rows.length} rows</li>)}
-            </ul>
-            <button type="button" className="btn primary" disabled={preview.summary.idClash || !preview.summary.id} onClick={() => void finish(preview.procedure)}>Apply import</button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+
+      {error.length > 0 && (
+        <div className="banner danger" role="alert">
+          <ul className="small" style={{ margin: 0 }}>{error.map((e, i) => <li key={i}>{e}</li>)}</ul>
+        </div>
+      )}
     </>
   );
 }

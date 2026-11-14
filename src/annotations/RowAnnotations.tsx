@@ -7,6 +7,7 @@ import { VoicePlayer, VoiceRecorder } from "./VoiceRecorder";
 import { useSetting } from "../state/settings";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../db/db";
+import { href } from "../app/router";
 
 export type SheetAction = "note" | "highlight" | "tag" | "confidence" | "draw" | "voice" | "debrief";
 
@@ -64,6 +65,9 @@ export function AnnotationActionSheet({
             </button>
           ))}
         </div>
+        {target.rowId && (
+          <a className="btn ghost" style={{ marginTop: 8 }} href={href.edit(target.procedureId, target.rowId)} onClick={onClose}>✎ Edit this row's text</a>
+        )}
       </Sheet>
     );
   }

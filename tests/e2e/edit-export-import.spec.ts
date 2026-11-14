@@ -22,6 +22,7 @@ test("edit a row, reorder, export JSON, re-import as a new procedure", async ({ 
   expect(triggers[1]).toBe("Edited trigger text");
 
   // Export JSON.
+  await page.getByRole("button", { name: "More", exact: true }).click();
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export JSON" }).click()]);
   const path = await download.path();
   const json = JSON.parse(readFileSync(path!, "utf8"));
@@ -31,12 +32,12 @@ test("edit a row, reorder, export JSON, re-import as a new procedure", async ({ 
 
   // Re-import as a new procedure under a different id.
   await page.goto("./#/new", { waitUntil: "networkidle" });
-  await page.getByRole("tab", { name: "Import JSON" }).click();
-  await page.getByLabel("Procedure JSON").fill(JSON.stringify(json));
-  await page.getByRole("button", { name: "Validate and preview" }).click();
+  await page.getByRole("tab", { name: "Paste or import" }).click();
+  await page.getByLabel("Paste here").fill(JSON.stringify(json));
+  await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.getByText("already exists")).toBeVisible();
   await page.getByLabel("Import under a different id").fill("demo-copy");
-  await page.getByRole("button", { name: "Apply import" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/#\/p\/demo-copy\/edit/);
   await page.goto("./#/p/demo-copy", { waitUntil: "networkidle" });
   await expect(page.getByText("Edited trigger text")).toBeVisible();
