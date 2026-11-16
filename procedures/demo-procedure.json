@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "id": "demo-procedure",
+  "title": "Demo procedure (placeholder, not real)",
+  "category": "MISC",
+  "fleets": ["CEO", "NEO", "A321"],
+  "tags": ["demo"],
+  "version": 1,
+  "relatedProcedures": [],
+  "gates": [
+    {
+      "id": "demo-gate-1",
+      "title": "Demo gate 1",
+      "aim": "Demo aim: shows a two-lane gate",
+      "layout": "two-lane",
+      "rows": [
+        {
+          "id": "demo-row-1",
+          "trigger": "Demo row 1 trigger",
+          "pf": { "action": "Demo row 1 PF action", "callout": "Demo row 1 PF callout" },
+          "pm": { "action": "Demo row 1 PM action" },
+          "status": "ok",
+          "why": "Demo rationale text",
+          "sourceRef": "Demo reference"
+        },
+        {
+          "id": "demo-row-2",
+          "trigger": "Demo row 2 trigger",
+          "pf": { "action": "", "standing": true },
+          "pm": { "action": "Demo row 2 PM action", "callout": "Demo row 2 PM callout" },
+          "status": "verify",
+          "statusNote": "Demo verify note"
+        },
+        {
+          "id": "demo-row-3",
+          "trigger": "Demo row 3 trigger",
+          "pf": { "action": "" },
+          "pm": { "action": "" },
+          "status": "to-fill",
+          "statusNote": "Demo to-fill note"
+        },
+        {
+          "id": "demo-row-4",
+          "trigger": "Demo row 4 trigger",
+          "pf": { "action": "Demo row 4 PF action (all fleets)" },
+          "pm": { "action": "Demo row 4 PM action (all fleets)" },
+          "status": "ok",
+          "variants": {
+            "A321": { "pf": { "action": "Demo row 4 PF action (A321 variant)" } }
+          }
+        }
+      ]
+    },
+    {
+      "id": "demo-gate-2a",
+      "title": "Demo branch A",
+      "layout": "single-lane",
+      "branch": { "parentGateId": "demo-gate-1", "condition": "Demo condition A" },
+      "rows": [
+        {
+          "id": "demo-row-5",
+          "trigger": "Demo row 5 trigger",
+          "action": "Demo row 5 action",
+          "who": "PM",
+          "callout": "Demo row 5 callout",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "id": "demo-gate-2b",
+      "title": "Demo branch B",
+      "layout": "single-lane",
+      "branch": { "parentGateId": "demo-gate-1", "condition": "Demo condition B" },
+      "rows": [
+        {
+          "id": "demo-row-6",
+          "trigger": "Demo row 6 trigger",
+          "action": "Demo row 6 action",
+          "who": "BOTH",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "id": "demo-gate-3",
+      "title": "Demo gate 3",
+      "layout": "two-lane",
+      "rows": [
+        {
+          "id": "demo-row-7",
+          "trigger": "Demo row 7 trigger",
+          "pf": { "action": "Demo row 7 PF action" },
+          "pm": { "action": "Demo row 7 PM action" },
+          "status": "ok"
+        }
+      ]
+    }
+  ],
+  "referenceTables": [
+    {
+      "id": "demo-table-1",
+      "title": "Demo table 1",
+      "note": "Demo table note",
+      "columns": ["Demo column A", "Demo column B"],
+      "rows": [["Demo cell A1", "Demo cell B1"], ["Demo cell A2", "Demo cell B2"]]
+    }
+  ],
+  "profile": [
+    { "label": "Demo point 1", "gateId": "demo-gate-1", "altitudeFt": 1000 },
+    { "label": "Demo point 2", "gateId": "demo-gate-3", "altitudeFt": 0 }
+  ]
+}

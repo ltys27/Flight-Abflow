@@ -1,0 +1,10 @@
+[
+  {
+    "id": "demo-procedure",
+    "file": "demo-procedure.json",
+    "title": "Demo procedure (placeholder, not real)",
+    "category": "MISC",
+    "fleets": ["CEO", "NEO", "A321"],
+    "version": 1
+  }
+]
