@@ -16,6 +16,7 @@ import { NewProcedureScreen } from "../screens/NewProcedureScreen";
 import { UpdatePrompt } from "./UpdatePrompt";
 import { BackupReminder } from "../backup/BackupReminder";
 import { useAutoSync } from "../sync/useAutoSync";
+import { ConnectionStatus } from "../components/ConnectionStatus";
 
 function ThemeApplier({ children }: { children: ReactNode }) {
   const s = useSettings();
@@ -81,7 +82,10 @@ export function App() {
                 ))}
               </nav>
             )}
-            <div className="content">{screen}</div>
+            <div className="content">
+              {!immersive && <div className="statusline"><ConnectionStatus /></div>}
+              {screen}
+            </div>
             <UpdatePrompt />
             <BackupReminder />
             <AutoSync />

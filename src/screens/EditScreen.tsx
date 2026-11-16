@@ -17,6 +17,7 @@ import { downloadText, procedureToJson, procedureToMarkdown, safeFilename } from
 import { formatPath } from "../content/validate";
 import { rowSummary } from "../edit/diff";
 import { newId } from "../util/id";
+import { ConnectionStatus } from "../components/ConnectionStatus";
 
 /** Stable sensor options: new objects each render would re-create sensors and cancel an in-progress drag. */
 const POINTER_OPTS = { activationConstraint: { distance: 6 } };
@@ -287,6 +288,7 @@ function Editor({ initial, shipped }: { initial: Procedure; shipped: Procedure |
       <div className="topbar">
         <a className="btn small" href={href.read(p.id)} aria-label="Done, back to read view">‹ Done</a>
         <span className="title">{p.title || "Untitled procedure"}</span>
+        <ConnectionStatus compact />
         <span className="small muted" aria-live="polite">{saved === "saved" ? "Saved" : saved === "saving" ? "Saving…" : saved === "dirty" ? "Saving…" : "Not saved"}</span>
         <button type="button" className="btn small" onClick={undo} disabled={!canUndo} aria-label="Undo">↶</button>
         <button type="button" className="btn small" onClick={redo} disabled={!canRedo} aria-label="Redo">↷</button>

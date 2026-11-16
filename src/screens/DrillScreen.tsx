@@ -11,6 +11,7 @@ import { grade as gradeStore } from "../schedule/store";
 import { isDue, type Grade, Rating } from "../schedule/scheduler";
 import { db } from "../db/db";
 import { useSettings, setSetting } from "../state/settings";
+import { ConnectionStatus } from "../components/ConnectionStatus";
 
 export function DrillScreen({ id }: { id: string }) {
   const lib = useLibrary();
@@ -60,6 +61,7 @@ export function DrillScreen({ id }: { id: string }) {
       <div className="topbar">
         <a className="btn small" href={href.read(id)} aria-label="Back to procedure">‹ Back</a>
         <span className="title">Drill: {p.title}</span>
+        <ConnectionStatus compact />
         {running && <button type="button" className="btn small" onClick={() => setRunning(null)}>End</button>}
       </div>
       {!running && (

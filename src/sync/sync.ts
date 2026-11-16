@@ -3,6 +3,7 @@ import { DEVICE_ONLY_SETTINGS, getSetting, setSetting, type SyncConfig, type Syn
 import { blobBytes } from "../backup/backup";
 import { buildSnapshot, mergeSnapshot, snapshotFingerprint, type Snapshot } from "./merge";
 import { githubClient, SyncConflictError, type RepoClient } from "./github";
+import { reportOnline } from "../app/connection";
 
 /**
  * Two-way sync with a GitHub repository (opt-in). One JSON file holds every
@@ -21,6 +22,15 @@ interface RemoteDoc {
 
 let inFlight: Promise<SyncState> | null = null;
 
+/** Lets the status indicator show "Syncing…" while a sync is running. */
+const syncingListeners = new Set<() => void>();
+export const isSyncing = () => inFlight !== null;
+export function subscribeSyncing(l: () => void): () => void {
+  syncingListeners.add(l);
+  return () => syncingListeners.delete(l);
+}
+const notifySyncing = () => syncingListeners.forEach((l) => l());
+
 export function syncPaths(cfg: Pick<SyncConfig, "path">) {
   const dir = cfg.path.replace(/^\/+|\/+$/g, "");
   const prefix = dir ? `${dir}/` : "";
@@ -31,7 +41,9 @@ export async function syncNow(reason: string, database: FlowDb = db, client?: Re
   if (inFlight) return inFlight;
   inFlight = run(reason, database, client, cfgOverride).finally(() => {
     inFlight = null;
+    notifySyncing();
   });
+  notifySyncing();
   return inFlight;
 }
 
@@ -91,6 +103,7 @@ async function run(reason: string, database: FlowDb, clientIn?: RepoClient, cfgO
         await client.putFile(paths.data, enc.encode(JSON.stringify(doc)), `Flow Scripts sync (${reason})`, remote?.sha);
         pushed = true;
       }
+      if (!cfgOverride) reportOnline();
       return done({ ok: true, message: pushed && pulled ? "Merged changes both ways" : pushed ? "Uploaded local changes" : pulled ? "Downloaded changes" : "Already in sync", pushed, pulled });
     } catch (e) {
       if (e instanceof SyncConflictError && attempt < 2) continue; // someone else pushed: pull again and retry

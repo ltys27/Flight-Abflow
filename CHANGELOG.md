@@ -131,6 +131,13 @@
   - "Edit this row's text" from a row's action sheet in the read view.
   - Controls stay at 16 px or more so iOS no longer zooms on focus.
 
+- Connection indicator on every screen: Online / Offline, and with sync on,
+  "synced HH:MM", "syncing…", "changes waiting" or "sync failed". Tap for
+  details, Sync now and Check connection. "Online" is confirmed with a HEAD
+  request for one of the app's own files (once a minute while visible),
+  because the browser's own flag reports online on Wi-Fi without internet.
+- Fixed: on wide screens the main nav sat 52 px low and covered page titles.
+
 ## Decisions the spec did not cover
 1. A lane cell counts as "completely empty" only with no action, no callout
    and not standing; callout-only cells are allowed.

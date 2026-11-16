@@ -12,8 +12,10 @@ test("edit a row, reorder, export JSON, re-import as a new procedure", async ({ 
   await handle.focus();
   await page.keyboard.press("Space");
   await expect(page.locator("[id^=DndLiveRegion]", { hasText: "was moved over droppable area demo-row-1" })).toHaveCount(1);
+  await page.waitForTimeout(250); // dnd-kit attaches its key listener and measures rows a tick after pickup
   await page.keyboard.press("ArrowDown");
   await expect(page.locator("[id^=DndLiveRegion]", { hasText: "was moved over droppable area demo-row-2" })).toHaveCount(1);
+  await page.waitForTimeout(150);
   await page.keyboard.press("Space");
   await expect(page.locator("[id^=DndLiveRegion]", { hasText: "was dropped" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Drag to reorder row 1.2" })).toBeVisible();
